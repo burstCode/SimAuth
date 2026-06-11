@@ -1,0 +1,35 @@
+# Claude Code
+.claude/
+CLAUDE.md
+
+# Environment
+.env
+*.env
+!.env.dist
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# .NET / C#
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.nupkg
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
