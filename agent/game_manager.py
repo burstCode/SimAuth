@@ -5,7 +5,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from config import config
+from config import AC_STEAM_APP_ID, config
 
 # ---------------------------------------------------------------------------
 # AC Shared Memory — SPageFileGraphic layout (AC SDK)
@@ -89,8 +89,8 @@ def patch_race_ini(player_name: str) -> None:
 
 def launch_game() -> subprocess.Popen:
     env = os.environ.copy()
-    env["SteamGameId"] = config.steam_game_id
-    env["SteamAppId"] = config.steam_game_id
+    env["SteamGameId"] = AC_STEAM_APP_ID
+    env["SteamAppId"] = AC_STEAM_APP_ID
     return subprocess.Popen(
         [config.ac_exe_path],
         cwd=str(Path(config.ac_exe_path).parent),

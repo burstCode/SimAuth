@@ -1,10 +1,9 @@
-from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
 
-from config import config
+from config import _base_dir, config
 
-_db_path = Path(__file__).parent / config.db_path
+_db_path = _base_dir() / config.db_path
 engine = create_engine(f"sqlite:///{_db_path}", connect_args={"check_same_thread": False})
 
 

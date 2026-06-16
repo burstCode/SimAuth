@@ -1,8 +1,16 @@
 import json
+import sys
 from pathlib import Path
 from pydantic import BaseModel
 
-_config_path = Path(__file__).parent / "config.json"
+
+def _base_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent
+
+
+_config_path = _base_dir() / "config.json"
 
 
 class OtpSenderConfig(BaseModel):
