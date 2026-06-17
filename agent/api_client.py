@@ -89,3 +89,13 @@ def create_session(identity_type: str, value_parts: list[str], pc_id: str) -> di
         timeout=5,
     )
     return _handle(resp)
+
+
+def get_tournament_config() -> dict:
+    resp = requests.get(f"{config.server_url}/api/tournament", timeout=5)
+    return _handle(resp)
+
+
+def update_tournament_config(rc: dict) -> dict:
+    resp = requests.patch(f"{config.server_url}/api/tournament", json=rc, timeout=5)
+    return _handle(resp)

@@ -7,22 +7,18 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QPushButton,
 )
 
-from config import AcRemoteConfig, save_remote_config
+import api_client
 from ui.styles import DARK
 
 
 class ServerSettingsDialog(QDialog):
-    """Диалог настройки AC-сервера. Изменения сохраняются в config.json."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Настройки сервера")
         self.setStyleSheet(DARK)
         self.setMinimumWidth(540)
-        self.setWindowFlags(
-            Qt.WindowType.Dialog |
-            Qt.WindowType.FramelessWindowHint
-        )
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
 
         root = QVBoxLayout()
         root.setContentsMargins(40, 32, 40, 32)
@@ -34,7 +30,7 @@ class ServerSettingsDialog(QDialog):
         root.addWidget(title)
         root.addSpacing(6)
 
-        hint = QLabel("Заполненные поля применяются к race.ini перед каждым запуском игры")
+        hint = QLabel("Настройки применяются на всех ПК при следующем старте сессии")
         hint.setObjectName("status")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hint.setWordWrap(True)
@@ -44,23 +40,23 @@ class ServerSettingsDialog(QDialog):
         root.addWidget(self._separator("Подключение"))
         root.addSpacing(12)
 
-        form = QFormLayout()
-        form.setSpacing(12)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-
         def lbl(t: str) -> QLabel:
             l = QLabel(t)
             l.setObjectName("form_label")
             return l
 
+        form = QFormLayout()
+        form.setSpacing(12)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
         self._server_ip = QLineEdit()
         self._server_ip.setPlaceholderText("173.234.30.178")
 
         self._server_http_port = QLineEdit()
-        self._server_http_port.setPlaceholderText("8308  (HTTP-порт из CM / инвайт-ссылки)")
+        self._server_http_port.setPlaceholderText("8308")
 
         self._password = QLineEdit()
-        self._password.setPlaceholderText("(пусто — без пароля)")
+        self._password.setPlaceholderText("пусто — без пароля")
         self._password.setEchoMode(QLineEdit.EchoMode.Password)
 
         form.addRow(lbl("IP-адрес"), self._server_ip)
@@ -68,7 +64,6 @@ class ServerSettingsDialog(QDialog):
         form.addRow(lbl("Пароль"), self._password)
         root.addLayout(form)
 
-        # Кнопка «Проверить» + строка статуса
         root.addSpacing(12)
         check_row = QHBoxLayout()
         btn_check = QPushButton("Проверить подключение")
@@ -94,10 +89,10 @@ class ServerSettingsDialog(QDialog):
         form2.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         self._car = QLineEdit()
-        self._car.setPlaceholderText("ks_toyota_ae86_tuned  (ID модели в AC)")
+        self._car.setPlaceholderText("ks_toyota_ae86_tuned")
 
         self._skin = QLineEdit()
-        self._skin.setPlaceholderText("04_trd_86  (пусто — не менять)")
+        self._skin.setPlaceholderText("пусто — не менять")
 
         form2.addRow(lbl("Модель"), self._car)
         form2.addRow(lbl("Ливрея"), self._skin)
@@ -134,18 +129,21 @@ class ServerSettingsDialog(QDialog):
         return lbl
 
     def _load_values(self):
-        from config import config
-        rc = config.ac_remote
-        if rc.server_ip:
-            self._server_ip.setText(rc.server_ip)
-        if rc.server_http_port:
-            self._server_http_port.setText(str(rc.server_http_port))
-        if rc.password is not None:
-            self._password.setText(rc.password)
-        if rc.car:
-            self._car.setText(rc.car)
-        if rc.skin:
-            self._skin.setText(rc.skin)
+        try:
+            rc = api_client.get_tournament_config()
+        except Exception:
+            self._check_status.setText("Не удалось загрузить настройки с сервера")
+            return
+        if rc.get("server_ip"):
+            self._server_ip.setText(rc["server_ip"])
+        if rc.get("server_http_port"):
+            self._server_http_port.setText(str(rc["server_http_port"]))
+        if rc.get("password") is not None:
+            self._password.setText(rc["password"])
+        if rc.get("car"):
+            self._car.setText(rc["car"])
+        if rc.get("skin"):
+            self._skin.setText(rc["skin"])
 
     def _test_connection(self):
         ip = self._server_ip.text().strip()
@@ -165,7 +163,7 @@ class ServerSettingsDialog(QDialog):
             name = data.get("name", "?")
             clients = data.get("clients", 0)
             maxc = data.get("maxclients", 0)
-            game_port = data.get("port", "?")
+            game_port = data.get("tport") or data.get("port", "?")
             self._check_status.setText(
                 f"✓  {name}\n"
                 f"Онлайн: {clients}/{maxc}   игровой порт: {game_port}"
@@ -180,12 +178,15 @@ class ServerSettingsDialog(QDialog):
             except ValueError:
                 return 0
 
-        rc = AcRemoteConfig(
-            server_ip=self._server_ip.text().strip(),
-            server_http_port=_int(self._server_http_port),
-            password=self._password.text() if self._password.text() != "" else None,
-            car=self._car.text().strip(),
-            skin=self._skin.text().strip(),
-        )
-        save_remote_config(rc)
-        self.accept()
+        rc = {
+            "server_ip": self._server_ip.text().strip(),
+            "server_http_port": _int(self._server_http_port),
+            "password": self._password.text() or None,
+            "car": self._car.text().strip(),
+            "skin": self._skin.text().strip(),
+        }
+        try:
+            api_client.update_tournament_config(rc)
+            self.accept()
+        except Exception as e:
+            self._check_status.setText(f"Ошибка сохранения: {e}")

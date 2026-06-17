@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install agent dependencies
+        run: pip install -r agent/requirements.txt pyinstaller
+
+      - name: Build SimAuthAgent
+        run: |
+          cd agent
+          pyinstaller SimAuthAgent.spec --clean --noconfirm
+          copy config.json dist\SimAuthAgent\config.json
+
+      - name: Install server dependencies
+        run: pip install -r server/requirements.txt pyinstaller
+
+      - name: Build SimAuthServer
+        run: |
+          cd server
+          pyinstaller SimAuthServer.spec --clean --noconfirm
+          copy config.json dist\SimAuthServer\config.json
+
+      - name: Create archives
+        run: |
+          Compress-Archive -Path agent\dist\SimAuthAgent -DestinationPath SimAuthAgent-${{ github.ref_name }}.zip
+          Compress-Archive -Path server\dist\SimAuthServer -DestinationPath SimAuthServer-${{ github.ref_name }}.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SimAuth ${{ github.ref_name }}
+          files: |
+            SimAuthAgent-${{ github.ref_name }}.zip
+            SimAuthServer-${{ github.ref_name }}.zip

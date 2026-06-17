@@ -10,14 +10,10 @@ from PyQt6.QtWidgets import (
 
 import api_client
 import game_manager
-from config import config
+from config import AcRemoteConfig, config
 from ui.settings_dialog import ServerSettingsDialog
 from ui.styles import DARK
 
-
-# ---------------------------------------------------------------------------
-# Фоновые потоки
-# ---------------------------------------------------------------------------
 
 class PollingWorker(QThread):
     session_found = pyqtSignal(dict)
@@ -60,10 +56,6 @@ class ApiWorker(QThread):
         except Exception as e:
             self.error.emit(str(e))
 
-
-# ---------------------------------------------------------------------------
-# Экран регистрации
-# ---------------------------------------------------------------------------
 
 class PassportTab(QWidget):
     submit = pyqtSignal(str, str, str)
@@ -178,6 +170,7 @@ class PhoneTab(QWidget):
 
 class RegistrationScreen(QWidget):
     session_created = pyqtSignal(dict)
+    settings_requested = pyqtSignal()
 
     def __init__(self, pc_id: str):
         super().__init__()
@@ -199,6 +192,7 @@ class RegistrationScreen(QWidget):
         self._phone_tab = PhoneTab()
         self._tabs.addTab(self._passport_tab, "Паспорт")
         self._tabs.addTab(self._phone_tab, "Телефон")
+        self._tabs.setTabToolTip(1, "Пока не реализовано")
         root.addWidget(self._tabs)
 
         self._error = QLabel()
@@ -206,7 +200,6 @@ class RegistrationScreen(QWidget):
         self._error.setWordWrap(True); self._error.hide()
         root.addSpacing(8); root.addWidget(self._error); root.addStretch()
 
-        # Нижняя строка: станция слева, кнопка настроек справа
         bottom_row = QHBoxLayout()
         status = QLabel(f"Рабочая станция: {pc_id}")
         status.setObjectName("status")
@@ -259,8 +252,6 @@ class RegistrationScreen(QWidget):
     def _on_otp_error(self, msg: str):
         self._phone_tab.reset_otp_button(); self._show_error(msg)
 
-    settings_requested = pyqtSignal()
-
     def _set_busy(self, busy: bool):
         self._passport_tab.set_enabled(not busy); self._phone_tab.set_enabled(not busy)
 
@@ -270,10 +261,6 @@ class RegistrationScreen(QWidget):
     def _clear_error(self):
         self._error.hide(); self._error.clear()
 
-
-# ---------------------------------------------------------------------------
-# Экран «Готов к старту»
-# ---------------------------------------------------------------------------
 
 class ReadyScreen(QWidget):
     ready_clicked = pyqtSignal()
@@ -307,13 +294,9 @@ class ReadyScreen(QWidget):
         self.duration_label.setText(f"Длительность сессии: {session['duration_minutes']} мин")
 
 
-# ---------------------------------------------------------------------------
-# Экран «Игра идёт» (загрузка → обратный отсчёт)
-# ---------------------------------------------------------------------------
-
 class ActiveScreen(QWidget):
     time_expired = pyqtSignal()
-    tick = pyqtSignal(int)  # remaining seconds, каждую секунду
+    tick = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
@@ -323,7 +306,6 @@ class ActiveScreen(QWidget):
 
         self._inner = QStackedWidget()
 
-        # --- Страница 0: загрузка ---
         load_w = QWidget()
         load_lay = QVBoxLayout(load_w)
         load_lay.setAlignment(Qt.AlignmentFlag.AlignCenter); load_lay.setSpacing(16)
@@ -338,7 +320,6 @@ class ActiveScreen(QWidget):
         load_lay.addSpacing(8); load_lay.addWidget(self._grace_label)
         load_lay.addStretch()
 
-        # --- Страница 1: обратный отсчёт ---
         play_w = QWidget()
         play_lay = QVBoxLayout(play_w)
         play_lay.setAlignment(Qt.AlignmentFlag.AlignCenter); play_lay.setSpacing(20)
@@ -353,8 +334,8 @@ class ActiveScreen(QWidget):
         play_lay.addWidget(hint); play_lay.addWidget(self.timer_label)
         play_lay.addStretch()
 
-        self._inner.addWidget(load_w)   # 0 — загрузка
-        self._inner.addWidget(play_w)   # 1 — отсчёт
+        self._inner.addWidget(load_w)
+        self._inner.addWidget(play_w)
 
         outer.addWidget(self._inner)
         self.setLayout(outer)
@@ -363,7 +344,6 @@ class ActiveScreen(QWidget):
         self._ticker = QTimer(self)
         self._ticker.timeout.connect(self._tick)
 
-        # Таймер обратного отсчёта для grace label
         self._grace_remaining = 0
         self._grace_ticker = QTimer(self)
         self._grace_ticker.timeout.connect(self._grace_tick)
@@ -412,10 +392,6 @@ class ActiveScreen(QWidget):
             self._grace_label.setText("")
 
 
-# ---------------------------------------------------------------------------
-# Экран «Игра закрылась» (неожиданно)
-# ---------------------------------------------------------------------------
-
 class GameCrashedScreen(QWidget):
     restart_clicked = pyqtSignal()
     finish_clicked = pyqtSignal()
@@ -460,10 +436,6 @@ class GameCrashedScreen(QWidget):
         self._remaining_label.setText(f"{m:02d}:{s:02d}")
 
 
-# ---------------------------------------------------------------------------
-# Экран «Сессия завершена»
-# ---------------------------------------------------------------------------
-
 class CompleteScreen(QWidget):
     def __init__(self):
         super().__init__()
@@ -492,10 +464,6 @@ class CompleteScreen(QWidget):
             self.result_label.setText("Круги не засчитаны")
 
 
-# ---------------------------------------------------------------------------
-# Главное окно
-# ---------------------------------------------------------------------------
-
 class MainWindow(QMainWindow):
     _IDX_REGISTER = 0
     _IDX_READY    = 1
@@ -512,7 +480,7 @@ class MainWindow(QMainWindow):
         self._session: dict | None = None
         self._process = None
         self._poller: PollingWorker | None = None
-        self._finishing = False  # защита от двойного вызова _finish_session
+        self._finishing = False
 
         self._stack = QStackedWidget()
         self.setCentralWidget(self._stack)
@@ -534,17 +502,14 @@ class MainWindow(QMainWindow):
         self._crashed.restart_clicked.connect(self._restart_game)
         self._crashed.finish_clicked.connect(self._on_time_expired)
 
-        # Watchdog: проверяет, жив ли процесс игры
         self._watchdog = QTimer(self)
         self._watchdog.setInterval(3000)
         self._watchdog.timeout.connect(self._check_game_alive)
 
-        # Grace timer: отсчёт до старта таймера сессии
         self._grace_timer = QTimer(self)
         self._grace_timer.setSingleShot(True)
         self._grace_timer.timeout.connect(self._start_countdown)
 
-        # Lap tracker: каждые 2 сек читает лучший круг из shared memory AC
         self._live_best_lap: int | None = None
         self._lap_tracker = QTimer(self)
         self._lap_tracker.setInterval(2000)
@@ -552,21 +517,14 @@ class MainWindow(QMainWindow):
 
         self._show_registration()
 
-    # --- Настройки сервера ---
-
     def _open_settings(self):
-        # Останавливаем поллер: пока открыт диалог, не хотим внезапно
-        # переключиться на ReadyScreen из-за найденной сессии
         self._stop_polling()
         dlg = ServerSettingsDialog(self)
         dlg.exec()
-        # Возобновляем только если всё ещё на экране регистрации
         if self._stack.currentIndex() == self._IDX_REGISTER:
             self._poller = PollingWorker(config.pc_id, config.poll_interval_seconds)
             self._poller.session_found.connect(self._on_session_found)
             self._poller.start()
-
-    # --- Регистрация / поллинг ---
 
     def _show_registration(self):
         self._finishing = False
@@ -588,14 +546,19 @@ class MainWindow(QMainWindow):
         self._ready.set_session(session)
         self._stack.setCurrentIndex(self._IDX_READY)
 
-    # --- Старт игры ---
-
     def _on_ready(self):
         if not self._session:
             return
         player_name = self._session["participant"]["full_name"]
+
         try:
-            game_manager.patch_race_ini(player_name)
+            rc_data = api_client.get_tournament_config()
+            rc = AcRemoteConfig(**rc_data)
+        except Exception:
+            rc = None
+
+        try:
+            game_manager.patch_race_ini(player_name, rc)
             self._process = game_manager.launch_game()
             api_client.start_session(self._session["id"])
         except Exception as e:
@@ -610,7 +573,6 @@ class MainWindow(QMainWindow):
         self._grace_timer.start(config.launch_grace_seconds * 1000)
 
     def _start_countdown(self):
-        """Вызывается после grace-периода — стартует реальный отсчёт."""
         if not self._session:
             return
         player_name = self._session["participant"]["full_name"]
@@ -618,12 +580,9 @@ class MainWindow(QMainWindow):
         self._lap_tracker.start()
 
     def _update_live_lap(self):
-        """Каждые 2 сек опрашивает shared memory AC и сохраняет лучший круг."""
         t = game_manager.read_best_lap_live()
         if t and (self._live_best_lap is None or t < self._live_best_lap):
             self._live_best_lap = t
-
-    # --- Watchdog ---
 
     def _check_game_alive(self):
         if self._finishing:
@@ -631,7 +590,6 @@ class MainWindow(QMainWindow):
         if self._process and not game_manager.is_game_running(self._process):
             self._watchdog.stop()
             self._lap_tracker.stop()
-            # Финальное чтение (AC только что умер, но SM может ещё быть доступна)
             self._update_live_lap()
             self._active.stop()
             self._crashed.update_remaining(self._active._remaining)
@@ -642,23 +600,23 @@ class MainWindow(QMainWindow):
             return
         player_name = self._session["participant"]["full_name"]
         try:
-            game_manager.patch_race_ini(player_name)
+            rc_data = api_client.get_tournament_config()
+            rc = AcRemoteConfig(**rc_data)
+        except Exception:
+            rc = None
+        try:
+            game_manager.patch_race_ini(player_name, rc)
             self._process = game_manager.launch_game()
         except Exception:
             return
 
-        # Если grace ещё не истёк — возвращаемся к экрану загрузки,
-        # иначе сразу к таймеру (start_countdown уже был вызван)
         if self._grace_timer.isActive():
             self._active.show_loading(player_name, self._grace_timer.remainingTime() // 1000)
         else:
-            # Возобновляем отсчёт с места остановки
             self._active._ticker.start(1000)
 
         self._stack.setCurrentIndex(self._IDX_ACTIVE)
         self._watchdog.start()
-
-    # --- Таймер истёк или «Завершить» нажата ---
 
     def _on_time_expired(self):
         if self._finishing:
@@ -667,7 +625,6 @@ class MainWindow(QMainWindow):
         self._grace_timer.stop()
         self._watchdog.stop()
         self._lap_tracker.stop()
-        # Последнее чтение из shared memory пока AC ещё жива
         self._update_live_lap()
         self._active.stop()
         if self._process:
@@ -676,8 +633,6 @@ class MainWindow(QMainWindow):
 
     def _finish_session(self):
         player_name = self._session["participant"]["full_name"] if self._session else ""
-        # Приоритет: shared memory (собрана во время сессии)
-        # Запасной вариант: race_out.json (работает только при нормальном выходе из AC)
         best_lap = self._live_best_lap or game_manager.read_best_lap_from_file(player_name)
         try:
             api_client.complete_session(self._session["id"], best_lap)

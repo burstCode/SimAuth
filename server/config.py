@@ -18,6 +18,14 @@ class OtpSenderConfig(BaseModel):
     model_config = {"extra": "allow"}
 
 
+class AcRemoteConfig(BaseModel):
+    server_ip: str = ""
+    server_http_port: int = 0
+    password: str | None = None
+    car: str = ""
+    skin: str = ""
+
+
 class ServerConfig(BaseModel):
     session_duration_minutes: int = 10
     otp_ttl_minutes: int = 5
@@ -26,6 +34,7 @@ class ServerConfig(BaseModel):
     port: int = 8000
     timezone: str = "Europe/Moscow"
     otp_sender: OtpSenderConfig = OtpSenderConfig()
+    ac_remote: AcRemoteConfig = AcRemoteConfig()
 
 
 def load_config() -> ServerConfig:
@@ -33,6 +42,13 @@ def load_config() -> ServerConfig:
         data = json.loads(_config_path.read_text(encoding="utf-8"))
         return ServerConfig(**data)
     return ServerConfig()
+
+
+def save_tournament_config(rc: AcRemoteConfig) -> None:
+    config.ac_remote = rc
+    data = json.loads(_config_path.read_text(encoding="utf-8")) if _config_path.exists() else {}
+    data["ac_remote"] = rc.model_dump()
+    _config_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 config = load_config()

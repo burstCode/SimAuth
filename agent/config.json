@@ -2,12 +2,5 @@
   "server_url": "http://localhost:8000",
   "pc_id": "PC-01",
   "poll_interval_seconds": 2,
-  "launch_grace_seconds": 15,
-  "ac_remote": {
-    "server_ip": "173.234.30.178",
-    "server_http_port": 8308,
-    "password": null,
-    "car": "ks_toyota_ae86_tuned",
-    "skin": ""
-  }
+  "launch_grace_seconds": 15
 }
