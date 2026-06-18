@@ -33,13 +33,13 @@ jobs:
       - name: Build SimAuthServer
         run: |
           cd server
-          pyinstaller SimAuthServer.spec --clean --noconfirm
-          copy config.json dist\SimAuthServer\config.json
+          pyinstaller SimAuthServerGUI.spec --clean --noconfirm
+          copy config.json dist\SimAuthServerGUI\config.json
 
       - name: Create archives
         run: |
           Compress-Archive -Path agent\dist\SimAuthAgent -DestinationPath SimAuthAgent-${{ github.ref_name }}.zip
-          Compress-Archive -Path server\dist\SimAuthServer -DestinationPath SimAuthServer-${{ github.ref_name }}.zip
+          Compress-Archive -Path server\dist\SimAuthServerGUI -DestinationPath SimAuthServer-${{ github.ref_name }}.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

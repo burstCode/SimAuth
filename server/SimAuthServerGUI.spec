@@ -1,16 +1,20 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller spec for SimAuthServer
-# Run: pyinstaller SimAuthServer.spec  (from server/ directory)
+# PyInstaller spec for SimAuthServerGUI
+# Run: pyinstaller SimAuthServerGUI.spec  (from server/ directory)
 
 block_cipher = None
 
 a = Analysis(
-    ['server_entry.py'],
+    ['gui_main.py'],
     pathex=['.'],
     binaries=[],
-    datas=[],           # config.json и simauth.db – рядом с exe, не внутри bundle
+    datas=[],
     hiddenimports=[
-        # uvicorn динамически подгружает протоколы и event loop
+        'PyQt6.sip',
+        'PyQt6.QtCore',
+        'PyQt6.QtGui',
+        'PyQt6.QtWidgets',
+        'uvicorn',
         'uvicorn.logging',
         'uvicorn.loops',
         'uvicorn.loops.auto',
@@ -23,23 +27,20 @@ a = Analysis(
         'uvicorn.protocols.websockets.auto',
         'uvicorn.lifespan',
         'uvicorn.lifespan.on',
-        # SQLAlchemy диалект SQLite
         'sqlalchemy.dialects.sqlite',
-        'sqlalchemy.dialects.sqlite.pysqlite',
-        'sqlalchemy.sql.default_comparator',
-        # asyncio backend для anyio
+        'anyio',
         'anyio._backends._asyncio',
-        # pydantic
         'pydantic',
         'pydantic_core',
-        # email (нужен starlette для responses)
-        'email.mime.multipart',
         'email.mime.text',
+        'email.mime.multipart',
+        'gui.main_window',
+        'gui.server_thread',
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['PyQt6', 'matplotlib', 'numpy', 'PIL', 'tkinter'],
+    excludes=['matplotlib', 'numpy', 'PIL', 'tkinter'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -53,12 +54,12 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='SimAuthServer',
+    name='SimAuthServerGUI',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,       # сервер – консольное приложение, чтобы видеть логи
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -74,5 +75,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='SimAuthServer',
+    name='SimAuthServerGUI',
 )

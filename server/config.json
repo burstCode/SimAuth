@@ -1,11 +1,19 @@
 {
-  "session_duration_minutes": 5,
+  "session_duration_minutes": 10,
   "otp_ttl_minutes": 5,
   "db_path": "simauth.db",
   "host": "0.0.0.0",
-  "port": 8000,
+  "port": 10500,
   "timezone": "Europe/Moscow",
+  "admin_password": "admin",
   "otp_sender": {
     "type": "log"
+  },
+  "ac_remote": {
+    "server_ip": "173.234.30.178",
+    "server_http_port": 8308,
+    "password": null,
+    "car": "ks_toyota_gt86",
+    "skin": ""
   }
 }

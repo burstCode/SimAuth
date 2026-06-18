@@ -56,7 +56,7 @@ class ServerSettingsDialog(QDialog):
         self._server_http_port.setPlaceholderText("8308")
 
         self._password = QLineEdit()
-        self._password.setPlaceholderText("пусто — без пароля")
+        self._password.setPlaceholderText("пусто – без пароля")
         self._password.setEchoMode(QLineEdit.EchoMode.Password)
 
         form.addRow(lbl("IP-адрес"), self._server_ip)
@@ -92,7 +92,7 @@ class ServerSettingsDialog(QDialog):
         self._car.setPlaceholderText("ks_toyota_ae86_tuned")
 
         self._skin = QLineEdit()
-        self._skin.setPlaceholderText("пусто — не менять")
+        self._skin.setPlaceholderText("пусто – не менять")
 
         form2.addRow(lbl("Модель"), self._car)
         form2.addRow(lbl("Ливрея"), self._skin)

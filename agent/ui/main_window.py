@@ -1,7 +1,10 @@
+import sys
 import time
+from pathlib import Path
 from typing import Callable
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread
+from PyQt6.QtGui import QFont, QFontDatabase, QPixmap
 from PyQt6.QtWidgets import (
     QMainWindow, QStackedWidget, QWidget,
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -14,10 +17,46 @@ from config import AcRemoteConfig, config
 from ui.settings_dialog import ServerSettingsDialog
 from ui.styles import DARK
 
+# When frozen by PyInstaller, bundled datas live in sys._MEIPASS; otherwise agent/assets/
+_ASSETS = Path(getattr(sys, "_MEIPASS", Path(__file__).parent.parent)) / "assets"
+
+
+def _make_logo() -> QWidget:
+    font_id = QFontDatabase.addApplicationFont(str(_ASSETS / "Trobus-Expanded.ttf"))
+    families = QFontDatabase.applicationFontFamilies(font_id)
+    family = families[0] if families else "Arial"
+
+    row = QWidget()
+    lay = QHBoxLayout(row)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(14)
+    lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+    logo_img = QLabel()
+    pix = QPixmap(str(_ASSETS / "overdrive.jpg"))
+    if not pix.isNull():
+        logo_img.setPixmap(pix.scaledToHeight(58, Qt.TransformationMode.SmoothTransformation))
+    lay.addWidget(logo_img)
+
+    slash = QLabel("/")
+    slash.setObjectName("logo_slash")
+    lay.addWidget(slash)
+
+    # Widget-level stylesheet overrides the global QWidget font-family rule
+    name_lbl = QLabel(
+        '<span style="color: #bcbabb;">Sim</span>'
+        '<span style="color: #e51a20;">Auth</span>'
+    )
+    name_lbl.setStyleSheet(f"font-family: '{family}'; font-size: 26px;")
+    lay.addWidget(name_lbl)
+
+    return row
+
 
 class PollingWorker(QThread):
     session_found = pyqtSignal(dict)
     error = pyqtSignal(str)
+    status_changed = pyqtSignal(bool)  # True = server reachable, False = unreachable
 
     def __init__(self, pc_id: str, interval: int):
         super().__init__()
@@ -32,11 +71,13 @@ class PollingWorker(QThread):
         while self._running:
             try:
                 session = api_client.get_pending_session(self._pc_id)
+                self.status_changed.emit(True)
                 if session:
                     self.session_found.emit(session)
                     return
             except Exception as e:
                 self.error.emit(str(e))
+                self.status_changed.emit(False)
             time.sleep(self._interval)
 
 
@@ -58,7 +99,8 @@ class ApiWorker(QThread):
 
 
 class PassportTab(QWidget):
-    submit = pyqtSignal(str, str, str)
+    # Emits: last_name, first_name, middle_name, series, number
+    submit = pyqtSignal(str, str, str, str, str)
 
     def __init__(self):
         super().__init__()
@@ -70,14 +112,18 @@ class PassportTab(QWidget):
         form.setSpacing(12)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        self._name = QLineEdit(); self._name.setPlaceholderText("Иванов Иван Иванович")
-        self._series = QLineEdit(); self._series.setPlaceholderText("4510"); self._series.setMaxLength(4)
-        self._number = QLineEdit(); self._number.setPlaceholderText("123456"); self._number.setMaxLength(6)
-
         def lbl(t):
             l = QLabel(t); l.setObjectName("form_label"); return l
 
-        form.addRow(lbl("ФИО"), self._name)
+        self._last = QLineEdit(); self._last.setPlaceholderText("Иванов")
+        self._first = QLineEdit(); self._first.setPlaceholderText("Иван")
+        self._middle = QLineEdit(); self._middle.setPlaceholderText("Иванович (необязательно)")
+        self._series = QLineEdit(); self._series.setPlaceholderText("4510"); self._series.setMaxLength(4)
+        self._number = QLineEdit(); self._number.setPlaceholderText("123456"); self._number.setMaxLength(6)
+
+        form.addRow(lbl("Фамилия"), self._last)
+        form.addRow(lbl("Имя"), self._first)
+        form.addRow(lbl("Отчество"), self._middle)
         form.addRow(lbl("Серия"), self._series)
         form.addRow(lbl("Номер"), self._number)
 
@@ -92,17 +138,21 @@ class PassportTab(QWidget):
         self.setLayout(outer)
 
     def _on_submit(self):
-        n, s, num = self._name.text().strip(), self._series.text().strip(), self._number.text().strip()
-        if n and s and num:
-            self.submit.emit(n, s, num)
+        last = self._last.text().strip()
+        first = self._first.text().strip()
+        middle = self._middle.text().strip()
+        s = self._series.text().strip()
+        num = self._number.text().strip()
+        if last and first and s and num:
+            self.submit.emit(last, first, middle, s, num)
 
     def set_enabled(self, v: bool):
-        for w in (self._name, self._series, self._number, self._btn):
+        for w in (self._last, self._first, self._middle, self._series, self._number, self._btn):
             w.setEnabled(v)
 
 
 class PhoneTab(QWidget):
-    submit = pyqtSignal(str, str, str)
+    submit = pyqtSignal(str, str, str, str, str)  # last, first, middle, phone, otp
     otp_requested = pyqtSignal(str)
 
     def __init__(self):
@@ -118,9 +168,13 @@ class PhoneTab(QWidget):
         form.setSpacing(12)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        self._name = QLineEdit(); self._name.setPlaceholderText("Иванов Иван Иванович")
+        self._last = QLineEdit(); self._last.setPlaceholderText("Иванов")
+        self._first = QLineEdit(); self._first.setPlaceholderText("Иван")
+        self._middle = QLineEdit(); self._middle.setPlaceholderText("Иванович (необязательно)")
         self._phone = QLineEdit(); self._phone.setPlaceholderText("+79991234567")
-        form.addRow(lbl("ФИО"), self._name)
+        form.addRow(lbl("Фамилия"), self._last)
+        form.addRow(lbl("Имя"), self._first)
+        form.addRow(lbl("Отчество"), self._middle)
         form.addRow(lbl("Телефон"), self._phone)
         outer.addLayout(form)
 
@@ -158,12 +212,15 @@ class PhoneTab(QWidget):
         self._otp_btn.setEnabled(True)
 
     def _on_submit(self):
-        n, p, o = self._name.text().strip(), self._phone.text().strip(), self._otp.text().strip()
-        if n and p and o:
-            self.submit.emit(n, p, o)
+        last = self._last.text().strip(); first = self._first.text().strip()
+        middle = self._middle.text().strip()
+        phone = self._phone.text().strip(); otp = self._otp.text().strip()
+        if last and first and phone and otp:
+            self.submit.emit(last, first, middle, phone, otp)
 
     def set_enabled(self, v: bool):
-        self._name.setEnabled(v); self._phone.setEnabled(v); self._otp.setEnabled(v)
+        for w in (self._last, self._first, self._middle, self._phone, self._otp):
+            w.setEnabled(v)
         self._otp_btn.setEnabled(v and not self._otp_sent)
         self._submit_btn.setEnabled(v and self._otp_sent)
 
@@ -179,36 +236,62 @@ class RegistrationScreen(QWidget):
         self._otp_worker: ApiWorker | None = None
 
         root = QVBoxLayout()
-        root.setContentsMargins(60, 40, 60, 20); root.setSpacing(0)
+        root.setContentsMargins(40, 20, 40, 20); root.setSpacing(0)
 
-        title = QLabel("SimAuth"); title.setObjectName("title"); title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo = _make_logo()
         hint = QLabel("Зарегистрируйтесь для начала сессии")
         hint.setObjectName("subtitle"); hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        root.addWidget(title); root.addSpacing(4); root.addWidget(hint); root.addSpacing(24)
 
         self._tabs = QTabWidget()
         self._passport_tab = PassportTab()
         self._phone_tab = PhoneTab()
         self._tabs.addTab(self._passport_tab, "Паспорт")
         self._tabs.addTab(self._phone_tab, "Телефон")
-        self._tabs.setTabToolTip(1, "Пока не реализовано")
-        root.addWidget(self._tabs)
+        self._tabs.setTabEnabled(1, False)
+        self._tabs.setTabToolTip(1, "В разработке")
+        self._tabs.addTab(QWidget(), "В/У")
+        self._tabs.setTabEnabled(2, False)
+        self._tabs.setTabToolTip(2, "В разработке")
+        self._tabs.addTab(QWidget(), "Свид. о рождении")
+        self._tabs.setTabEnabled(3, False)
+        self._tabs.setTabToolTip(3, "В разработке")
+
+        tabs_wrap = QWidget()
+        tabs_wrap.setMaximumWidth(700)
+        tw_lay = QVBoxLayout(tabs_wrap)
+        tw_lay.setContentsMargins(0, 0, 0, 0)
+        tw_lay.addWidget(self._tabs)
+
+        tabs_row = QHBoxLayout()
+        tabs_row.addStretch()
+        tabs_row.addWidget(tabs_wrap)
+        tabs_row.addStretch()
 
         self._error = QLabel()
         self._error.setObjectName("error"); self._error.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._error.setWordWrap(True); self._error.hide()
-        root.addSpacing(8); root.addWidget(self._error); root.addStretch()
+
+        # Vertically center the main block; PC id pinned to bottom
+        root.addStretch()
+        root.addWidget(logo); root.addSpacing(8); root.addWidget(hint); root.addSpacing(24)
+        root.addLayout(tabs_row)
+        root.addSpacing(8); root.addWidget(self._error)
+        root.addStretch()
+
+        self._conn_dot = QLabel()
+        self._conn_dot.setFixedSize(10, 10)
+        self._conn_dot.setStyleSheet("border-radius: 5px; background-color: #555555;")
+        self._conn_text = QLabel("Подключение…")
+        self._conn_text.setObjectName("status")
 
         bottom_row = QHBoxLayout()
-        status = QLabel(f"Рабочая станция: {pc_id}")
-        status.setObjectName("status")
-        settings_btn = QPushButton("⚙ Настройки сервера")
-        settings_btn.setObjectName("otp_btn")
-        settings_btn.clicked.connect(self.settings_requested)
-        bottom_row.addWidget(status)
+        station = QLabel(f"Рабочая станция: {pc_id}")
+        station.setObjectName("status")
+        bottom_row.addWidget(station)
         bottom_row.addStretch()
-        bottom_row.addWidget(settings_btn)
+        bottom_row.addWidget(self._conn_dot)
+        bottom_row.addSpacing(5)
+        bottom_row.addWidget(self._conn_text)
         root.addLayout(bottom_row)
         self.setLayout(root)
 
@@ -216,10 +299,11 @@ class RegistrationScreen(QWidget):
         self._phone_tab.otp_requested.connect(self._on_otp_request)
         self._phone_tab.submit.connect(self._on_phone_submit)
 
-    def _on_passport_submit(self, name: str, series: str, number: str):
+    def _on_passport_submit(self, last: str, first: str, middle: str, series: str, number: str):
         self._set_busy(True); self._clear_error()
+        mid = middle or None
         self._worker = ApiWorker(lambda: (
-            api_client.register_passport(name, series, number),
+            api_client.register_passport(last, first, mid, series, number),
             api_client.create_session("passport", [series, number], self._pc_id),
         )[-1])
         self._worker.success.connect(self._on_session_ready)
@@ -233,10 +317,11 @@ class RegistrationScreen(QWidget):
         self._otp_worker.error.connect(self._on_otp_error)
         self._otp_worker.start()
 
-    def _on_phone_submit(self, name: str, phone: str, otp: str):
+    def _on_phone_submit(self, last: str, first: str, middle: str, phone: str, otp: str):
         self._set_busy(True); self._clear_error()
+        mid = middle or None
         self._worker = ApiWorker(lambda: (
-            api_client.register_phone(name, phone, otp),
+            api_client.register_phone(last, first, mid, phone, otp),
             api_client.create_session("phone", [phone], self._pc_id),
         )[-1])
         self._worker.success.connect(self._on_session_ready)
@@ -260,6 +345,14 @@ class RegistrationScreen(QWidget):
 
     def _clear_error(self):
         self._error.hide(); self._error.clear()
+
+    def set_connection_status(self, ok: bool):
+        if ok:
+            self._conn_dot.setStyleSheet("border-radius: 5px; background-color: #4caf50;")
+            self._conn_text.setText("Соединение с сервером установлено")
+        else:
+            self._conn_dot.setStyleSheet("border-radius: 5px; background-color: #e51a20;")
+            self._conn_text.setText("Соединение с сервером потеряно")
 
 
 class ReadyScreen(QWidget):
@@ -511,6 +604,7 @@ class MainWindow(QMainWindow):
         self._grace_timer.timeout.connect(self._start_countdown)
 
         self._live_best_lap: int | None = None
+        self._lap_baseline: int | None = None
         self._lap_tracker = QTimer(self)
         self._lap_tracker.setInterval(2000)
         self._lap_tracker.timeout.connect(self._update_live_lap)
@@ -524,6 +618,7 @@ class MainWindow(QMainWindow):
         if self._stack.currentIndex() == self._IDX_REGISTER:
             self._poller = PollingWorker(config.pc_id, config.poll_interval_seconds)
             self._poller.session_found.connect(self._on_session_found)
+            self._poller.status_changed.connect(self._reg.set_connection_status)
             self._poller.start()
 
     def _show_registration(self):
@@ -531,6 +626,7 @@ class MainWindow(QMainWindow):
         self._stack.setCurrentIndex(self._IDX_REGISTER)
         self._poller = PollingWorker(config.pc_id, config.poll_interval_seconds)
         self._poller.session_found.connect(self._on_session_found)
+        self._poller.status_changed.connect(self._reg.set_connection_status)
         self._poller.start()
 
     def _stop_polling(self):
@@ -549,7 +645,9 @@ class MainWindow(QMainWindow):
     def _on_ready(self):
         if not self._session:
             return
-        player_name = self._session["participant"]["full_name"]
+        p = self._session["participant"]
+        game_name = p.get("game_name") or p.get("full_name", "")
+        display_name = p.get("full_name") or game_name
 
         try:
             rc_data = api_client.get_tournament_config()
@@ -558,15 +656,15 @@ class MainWindow(QMainWindow):
             rc = None
 
         try:
-            game_manager.patch_race_ini(player_name, rc)
+            game_manager.patch_race_ini(game_name, rc)
             self._process = game_manager.launch_game()
             api_client.start_session(self._session["id"])
         except Exception as e:
-            self.setWindowTitle(f"SimAuth Agent — Ошибка: {e}")
+            self.setWindowTitle(f"SimAuth Agent – Ошибка: {e}")
             return
 
         self._live_best_lap = None
-        self._active.show_loading(player_name, config.launch_grace_seconds)
+        self._active.show_loading(display_name, config.launch_grace_seconds)
         self._stack.setCurrentIndex(self._IDX_ACTIVE)
 
         self._watchdog.start()
@@ -575,13 +673,14 @@ class MainWindow(QMainWindow):
     def _start_countdown(self):
         if not self._session:
             return
-        player_name = self._session["participant"]["full_name"]
-        self._active.start_countdown(self._session["duration_minutes"], player_name)
+        display_name = self._session["participant"].get("full_name", "")
+        self._lap_baseline = game_manager.read_best_lap_live()
+        self._active.start_countdown(self._session["duration_minutes"], display_name)
         self._lap_tracker.start()
 
     def _update_live_lap(self):
         t = game_manager.read_best_lap_live()
-        if t and (self._live_best_lap is None or t < self._live_best_lap):
+        if t and t != self._lap_baseline and (self._live_best_lap is None or t < self._live_best_lap):
             self._live_best_lap = t
 
     def _check_game_alive(self):
@@ -598,20 +697,22 @@ class MainWindow(QMainWindow):
     def _restart_game(self):
         if not self._session:
             return
-        player_name = self._session["participant"]["full_name"]
+        p = self._session["participant"]
+        game_name = p.get("game_name") or p.get("full_name", "")
+        display_name = p.get("full_name") or game_name
         try:
             rc_data = api_client.get_tournament_config()
             rc = AcRemoteConfig(**rc_data)
         except Exception:
             rc = None
         try:
-            game_manager.patch_race_ini(player_name, rc)
+            game_manager.patch_race_ini(game_name, rc)
             self._process = game_manager.launch_game()
         except Exception:
             return
 
         if self._grace_timer.isActive():
-            self._active.show_loading(player_name, self._grace_timer.remainingTime() // 1000)
+            self._active.show_loading(display_name, self._grace_timer.remainingTime() // 1000)
         else:
             self._active._ticker.start(1000)
 
@@ -632,8 +733,9 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(2000, self._finish_session)
 
     def _finish_session(self):
-        player_name = self._session["participant"]["full_name"] if self._session else ""
-        best_lap = self._live_best_lap or game_manager.read_best_lap_from_file(player_name)
+        p = self._session["participant"] if self._session else {}
+        game_name = p.get("game_name") or p.get("full_name", "")
+        best_lap = self._live_best_lap or game_manager.read_best_lap_from_file(game_name)
         try:
             api_client.complete_session(self._session["id"], best_lap)
         except Exception:
@@ -647,6 +749,7 @@ class MainWindow(QMainWindow):
         self._session = None
         self._process = None
         self._live_best_lap = None
+        self._lap_baseline = None
         self._lap_tracker.stop()
         self.setWindowTitle("SimAuth Agent")
         self._show_registration()

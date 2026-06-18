@@ -8,7 +8,10 @@ a = Analysis(
     ['main.py'],
     pathex=['.'],
     binaries=[],
-    datas=[],
+    datas=[
+        ('assets/overdrive.jpg',    'assets'),
+        ('assets/Trobus-Expanded.ttf', 'assets'),
+    ],
     hiddenimports=[
         'PyQt6.sip',
         'PyQt6.QtCore',

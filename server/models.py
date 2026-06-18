@@ -19,6 +19,7 @@ class SessionStatus(str, PyEnum):
 class IdentityType(str, PyEnum):
     PASSPORT = "passport"
     BIRTH_CERT = "birth_cert"
+    DRIVER_LICENSE = "driver_license"
     PHONE = "phone"
 
 
@@ -26,8 +27,26 @@ class Participant(Base):
     __tablename__ = "participants"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    full_name: Mapped[str] = mapped_column(String(200))
+    last_name: Mapped[str] = mapped_column(String(100), default="")
+    first_name: Mapped[str] = mapped_column(String(100), default="")
+    middle_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # full_name остаётся в БД для обратной совместимости, вычисляется при создании
+    full_name: Mapped[str] = mapped_column(String(200), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    @property
+    def display_name(self) -> str:
+        parts = [self.last_name, self.first_name]
+        if self.middle_name:
+            parts.append(self.middle_name)
+        return " ".join(p for p in parts if p) or self.full_name
+
+    @property
+    def game_name(self) -> str:
+        """Имя для race.ini: только Фамилия + Имя."""
+        if self.last_name and self.first_name:
+            return f"{self.last_name} {self.first_name}"
+        return self.full_name
 
     identity_documents: Mapped[list["IdentityDocument"]] = relationship(back_populates="participant")
     sessions: Mapped[list["GameSession"]] = relationship(back_populates="participant")

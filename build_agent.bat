@@ -7,7 +7,7 @@ set AGENT=%~dp0agent
 set DIST=%~dp0dist\SimAuthAgent
 
 echo ============================================
-echo   SimAuth Agent — сборка .exe
+echo   SimAuth Agent – сборка .exe
 echo ============================================
 echo.
 
@@ -33,8 +33,8 @@ echo.
 echo [3/3] Готово!
 echo.
 echo Дистрибутив: %DIST%\
-echo   SimAuthAgent.exe  — запустить на игровом ПК
-echo   config.json       — настроить под каждый ПК (server_url, pc_id, пути AC)
+echo   SimAuthAgent.exe  – запустить на игровом ПК
+echo   config.json       – настроить под каждый ПК (server_url, pc_id, пути AC)
 echo.
 echo Скопируй всю папку SimAuthAgent\ на флешку или в сеть.
 echo.

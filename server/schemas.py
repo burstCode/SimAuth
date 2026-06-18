@@ -6,27 +6,34 @@ from models import SessionStatus, IdentityType
 
 # --- Participant ---
 
-class ParticipantRegisterPassport(BaseModel):
-    full_name: str = Field(min_length=2, max_length=200)
+class NameFields(BaseModel):
+    last_name: str = Field(min_length=1, max_length=100)
+    first_name: str = Field(min_length=1, max_length=100)
+    middle_name: str | None = Field(default=None, max_length=100)
+
+
+class ParticipantRegisterPassport(NameFields):
     passport_series: str = Field(min_length=4, max_length=4)
     passport_number: str = Field(min_length=6, max_length=6)
 
 
-class ParticipantRegisterBirthCert(BaseModel):
-    full_name: str = Field(min_length=2, max_length=200)
+class ParticipantRegisterBirthCert(NameFields):
     cert_series: str = Field(min_length=2, max_length=10)
     cert_number: str = Field(min_length=4, max_length=10)
 
 
-class ParticipantRegisterPhone(BaseModel):
-    full_name: str = Field(min_length=2, max_length=200)
+class ParticipantRegisterPhone(NameFields):
     phone: str = Field(min_length=10, max_length=20)
     otp_code: str = Field(min_length=6, max_length=6)
 
 
 class ParticipantOut(BaseModel):
     id: int
+    last_name: str
+    first_name: str
+    middle_name: str | None
     full_name: str
+    game_name: str = ""
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session
 
 from config import _base_dir, config
@@ -18,3 +18,18 @@ def get_db():
 
 def init_db():
     Base.metadata.create_all(engine)
+    _migrate()
+
+
+def _migrate():
+    with engine.connect() as conn:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(participants)"))}
+        additions = [
+            ("last_name",   "ALTER TABLE participants ADD COLUMN last_name TEXT NOT NULL DEFAULT ''"),
+            ("first_name",  "ALTER TABLE participants ADD COLUMN first_name TEXT NOT NULL DEFAULT ''"),
+            ("middle_name", "ALTER TABLE participants ADD COLUMN middle_name TEXT"),
+        ]
+        for col, ddl in additions:
+            if col not in cols:
+                conn.execute(text(ddl))
+        conn.commit()

@@ -27,7 +27,7 @@ class OtpSender(ABC):
 
 
 class LogOtpSender(OtpSender):
-    """Заглушка для разработки — выводит код в лог."""
+    """Заглушка для разработки – выводит код в лог."""
 
     def send(self, phone: str, code: str) -> None:
         logger.warning("OTP [DEV] → %s: %s", phone, code)

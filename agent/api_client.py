@@ -64,19 +64,23 @@ def request_otp(phone: str) -> dict:
     return _handle(resp)
 
 
-def register_passport(full_name: str, series: str, number: str) -> dict:
+def register_passport(last_name: str, first_name: str, middle_name: str | None,
+                      series: str, number: str) -> dict:
     resp = requests.post(
         f"{config.server_url}/api/participants/passport",
-        json={"full_name": full_name, "passport_series": series, "passport_number": number},
+        json={"last_name": last_name, "first_name": first_name, "middle_name": middle_name or None,
+              "passport_series": series, "passport_number": number},
         timeout=5,
     )
     return _handle(resp)
 
 
-def register_phone(full_name: str, phone: str, otp_code: str) -> dict:
+def register_phone(last_name: str, first_name: str, middle_name: str | None,
+                   phone: str, otp_code: str) -> dict:
     resp = requests.post(
         f"{config.server_url}/api/participants/phone",
-        json={"full_name": full_name, "phone": phone, "otp_code": otp_code},
+        json={"last_name": last_name, "first_name": first_name, "middle_name": middle_name or None,
+              "phone": phone, "otp_code": otp_code},
         timeout=5,
     )
     return _handle(resp)

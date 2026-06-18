@@ -33,6 +33,7 @@ class ServerConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8000
     timezone: str = "Europe/Moscow"
+    admin_password: str = "admin"
     otp_sender: OtpSenderConfig = OtpSenderConfig()
     ac_remote: AcRemoteConfig = AcRemoteConfig()
 
@@ -44,11 +45,16 @@ def load_config() -> ServerConfig:
     return ServerConfig()
 
 
+def save_config() -> None:
+    _config_path.write_text(
+        json.dumps(config.model_dump(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
 def save_tournament_config(rc: AcRemoteConfig) -> None:
     config.ac_remote = rc
-    data = json.loads(_config_path.read_text(encoding="utf-8")) if _config_path.exists() else {}
-    data["ac_remote"] = rc.model_dump()
-    _config_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    save_config()
 
 
 config = load_config()

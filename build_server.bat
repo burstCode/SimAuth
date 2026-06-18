@@ -7,7 +7,7 @@ set SERVER=%~dp0server
 set DIST=%~dp0dist\SimAuthServer
 
 echo ============================================
-echo   SimAuth Server — сборка .exe
+echo   SimAuth Server – сборка .exe
 echo ============================================
 echo.
 
@@ -32,8 +32,8 @@ echo.
 echo [3/3] Готово!
 echo.
 echo Дистрибутив: %DIST%\
-echo   SimAuthServer.exe  — запустить на админском ПК
-echo   config.json        — настроить порт, таймаут сессии и т.д.
-echo   simauth.db         — создастся автоматически при первом запуске
+echo   SimAuthServer.exe  – запустить на админском ПК
+echo   config.json        – настроить порт, таймаут сессии и т.д.
+echo   simauth.db         – создастся автоматически при первом запуске
 echo.
 pause

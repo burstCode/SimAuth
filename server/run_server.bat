@@ -20,7 +20,7 @@ if "%PYTHON%"=="" (
 
 echo SimAuth Server запускается...
 echo Адрес: http://localhost:8000
-echo Ctrl+C — остановить
+echo Ctrl+C – остановить
 echo.
 "%PYTHON%" main.py
 pause
